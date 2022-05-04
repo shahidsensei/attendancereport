@@ -1,0 +1,314 @@
+function testSendReport()
+{
+  // should not send email if data in form responses is blank  
+  if (rowsPopulated() <= 1)
+  {
+    Logger.log('No data submitted to form');
+    return;
+  }
+  // future task - should check if all classes have submitted
+
+  Logger.log('simulate sending report here');
+  // simulate sending report here
+}
+
+function testDate()
+{
+  var date = Utilities.formatDate(new Date(), "GMT+8", "dd/MM/yyyy");
+  Logger.log('date = ' + date)
+  /*if (day == 'Sun' || day == 'Sat') // if Sunday or Saturday, skip sending email
+  {
+    Logger.log('Weekend');
+    return;
+  }*/
+}
+
+function todayIsHoliday()
+{
+  //read holiday dates from Admin sheet 2nd column, 3rd column is the description of the holiday
+  var today = new Date();
+  var today_formatted = Utilities.formatDate(today, "GMT+8", "dd/MM/yyyy");
+  //Logger.log('today : ' + today);
+  //Logger.log('today_formatted : ' + today_formatted);
+  var sh = SpreadsheetApp.getActiveSpreadsheet();
+  var holidays_sheet = sh.getSheetByName('Holidays');
+
+  if (holidays_sheet == null)
+  {
+    holidays_sheet = sh.insertSheet();
+    holidays_sheet.setName("Holidays");
+    holidays_sheet.getRange("A1").setValue('holidays (M/dd/yyyy)') //
+    holidays_sheet.getRange("B1").setValue('hols_description') // hardcoded defaults. user can change in spreadsheet
+  }
+
+  //Logger.log('In testHolidaysDonSend: holidays_sheet = '+holidays_sheet)
+  var holidays_data = holidays_sheet.getDataRange().getValues();
+  for(var i=1; i < holidays_data.length; i++)
+  {
+    var holiday = holidays_data[i][0];
+    var holiday_desc = holidays_data[i][1];
+    //Logger.log(holiday + ' ' + holiday_desc);
+    var holiday_date = new Date(holiday);
+    var holiday_date_formatted = Utilities.formatDate(holiday_date, "GMT+8", "dd/MM/yyyy");
+    //Logger.log('holiday_date = ' + holiday_date);
+    //Logger.log('holiday_date_formatted = ' + holiday_date_formatted);
+
+    if (today_formatted == holiday_date_formatted)
+    {
+      Logger.log(today_formatted + ': It is ' + holiday_desc + ' today!');
+      return true;
+    }
+  }
+  return false;
+
+  // store into array
+  // get current date
+  // if current date in holidays array
+}
+
+function sendReport() 
+{
+  // compile data from sec 2 spreadsheet, after sorting according to class
+  // create array of strings per class
+  // add to body of email
+
+  //var ui=SpreadsheetApp.getUi();  //shahid added
+  
+  // extract emails from admin spreadsheet and assign here
+  var email = extractEmailAdd();
+
+  if (email == '') // if no email addresses found in admin sheet, don't send report
+  {
+    Logger.log('email_to is blank');
+    return;
+  }
+  
+  var day = Utilities.formatDate(new Date(), "GMT+8", "EEE");
+  Logger.log('day = ' + day)
+  if (day == 'Sun' || day == 'Sat') // if Sunday or Saturday, skip sending email
+  {
+    Logger.log('Weekend - no emails sent');
+    return;
+  }
+
+  // should not send email also if public holidays
+  if (todayIsHoliday())
+  {
+    Logger.log('Holiday - no emails sent');
+    return;
+  }
+
+  // should not send email if data in form responses is blank  
+  if (rowsPopulated() <= 1)
+  {
+    Logger.log('No Data submitted to form');
+    return;
+  }
+
+  var today = getFormattedDate();
+
+  var subject = "Attendance Report for " + today; // shd include date
+  var html_body = subject + " is below:<br>";
+
+  cleanupData()
+  
+  var sh = SpreadsheetApp.getActiveSpreadsheet(); // gets the whole spreadsheet
+  var working_sheet = sh.getSheetByName("working sheet"); //gets hold of the Responses sheet
+  working_sheet.sort(2).sort(1); // sort by Class which is 2nd col, then by timestamp
+  Logger.log('In sendReport: working_sheet = '+working_sheet)
+  var working_sheet_data = working_sheet.getDataRange().getValues();
+
+  //iterate thru the file, and store the cell columns into variables, so that can compare
+  for(var i=1;i<working_sheet_data.length;i++)
+  {
+    var timestamp = working_sheet_data[i][0]; // to display or not?
+    var sch_class = working_sheet_data[i][1];
+    var attendance = working_sheet_data[i][2];
+    var status = working_sheet_data[i][3];
+
+    
+    html_body += sch_class + " " + attendance + " " + status + "<br>";
+  }
+   
+  //var today =new Date();
+  
+  //ui.alert('today = ' + today);
+  //ui.alert('body of email = ' + html_body);
+
+  MailApp.sendEmail({
+    to: email,
+    subject: subject,
+    replyTo:  email,
+    htmlBody: html_body
+  });  
+
+  backupTodayData();
+  reset();
+  
+}
+
+function extractEmailAdd()
+{
+  var sh = SpreadsheetApp.getActiveSpreadsheet();
+  var admin_sheet = sh.getSheetByName('Admin');
+
+  if (admin_sheet == null)
+  {
+    admin_sheet = sh.insertSheet();
+    admin_sheet.setName("Admin");
+    admin_sheet.getRange("A1").setValue('email_to')
+    admin_sheet.getRange("A2").setValue('noorshahid@gmail.com') // hardcoded defaults. user can change in spreadsheet
+  }
+  Logger.log('In extractEmailAdd: admin_sheet = '+admin_sheet)
+  var admin_data = admin_sheet.getDataRange().getValues();
+  var email_to = '';
+
+  for (var i =1;i<admin_data.length;i++)
+  {
+    email_to += admin_data[i][0] + ',';
+  }
+  email_to = email_to.substring(0, email_to.length-1); // delete the last comma?
+  //SpreadsheetApp.getUi().alert('email to ='+email_to)
+  return email_to;
+}
+
+function reset()
+// clears the form ready for a new day
+{
+  var sh = SpreadsheetApp.getActiveSpreadsheet();
+  responses_sheet = sh.getSheetByName('Form Responses 1');
+
+  // check for how many rows populated first before deleting (to exclude header)
+  Logger.log('In reset: responses_sheet = '+responses_sheet)
+  no_of_rows_to_delete = responses_sheet.getDataRange().getValues().length-1;
+
+  Logger.log("rows to delete = " +no_of_rows_to_delete);
+  if (no_of_rows_to_delete > 0)
+  {
+    // Mtd 1 - removes totally these rows
+    // insert same no of rows as per to delete, after the no_of_rows_to_delete position
+    responses_sheet.insertRowsAfter(no_of_rows_to_delete + 1,no_of_rows_to_delete);
+    responses_sheet.deleteRows(2,no_of_rows_to_delete); 
+
+    // Mtd 2 : alternative clearing of content without deleting the rows cells - doesnt work
+    // getRange(row, column, numRows, numColumns)
+    /*var range = responses_sheet.getRange(2,1,no_of_rows_to_delete,4);
+    range.clearContent();
+    sh.setActiveSelection('A2');// see if the new input data restarts from here after form deleted responses*/
+  }
+}
+
+
+
+function rowsPopulated()
+{
+  var sh = SpreadsheetApp.getActiveSpreadsheet();
+  responses_sheet = sh.getSheetByName('Form Responses 1');
+  Logger.log('In rowsPopulated: responses_sheet = '+responses_sheet)
+  var range = responses_sheet.getDataRange();
+  var rows = range.getValues().length;
+  //SpreadsheetApp.getUi().alert('rows of data ='+ rows);
+  return rows;
+}
+
+// task : purge old data - button
+
+function backupTodayData()
+{
+  var today = Utilities.formatDate(new Date(), "GMT+8", "dd/MM/yy");
+  
+  var sh = SpreadsheetApp.getActiveSpreadsheet();
+
+  // check if already backed up, if so, then exit if not continue
+  var today_sheet = sh.getSheetByName(today);
+
+  if (today_sheet == null) 
+  {
+    var responses_sheet = sh.getSheetByName("Form Responses 1");
+    responses_sheet.copyTo(sh).setName(today);
+  }
+  
+}
+
+function getFormattedDate()
+{
+  var currentDate = new Date();
+  var today = Utilities.formatDate(currentDate, "GMT+8", "EEEE dd/MM/yy");
+  //Logger.log('Today in subject = ' + today);
+  return today;
+}
+
+function cleanupData()
+// create a new temporary working sheet, to cleanup the data
+// cleanup data means to remove duplicates or extract the latest submission of the class based on the day - this allows multiple submissions per class in case need to edit
+{
+  //var ui=SpreadsheetApp.getUi();
+
+  //create a new sheet
+  var sh = SpreadsheetApp.getActiveSpreadsheet();
+
+  var responses_sheet = sh.getSheetByName("Form Responses 1"); //gets hold of the Responses sheet
+  responses_sheet.sort(2).sort(1); // sort by Class which is 2nd col, then by timestamp
+
+  var working_sheet = sh.getSheetByName("working sheet");
+
+  if (working_sheet != null) {
+      sh.deleteSheet(working_sheet);
+  }
+
+  working_sheet = sh.insertSheet();
+  working_sheet.setName("working sheet");
+  working_sheet.getRange("A1").setValue('Timestamp')
+  working_sheet.getRange("B1").setValue('Class')
+  working_sheet.getRange("C1").setValue('Attendance')
+  working_sheet.getRange("D1").setValue('Absentees status')
+  working_sheet.getRange("A2").setValue('=sortn(sort(\'Form Responses 1\'!A2:D42,1,false),9^9,2,2,true)')
+}
+
+function purgeOldData()
+{
+  var ui = SpreadsheetApp.getUi();
+  var response = ui.alert('Confirm purge old data?', ui.ButtonSet.YES_NO);
+
+  // Process the user's response.
+  if (response == ui.Button.YES) {
+    Logger.log('Confirmed data purge.');
+
+    var ss = SpreadsheetApp.getActive();
+    var allsheets = ss.getSheets();
+    for(var s in allsheets)
+    {
+      var sheet = allsheets[s];
+
+      // Stop iteration execution if the condition is meet.
+      if(
+        (sheet.getName() == "Form Responses 1") || 
+        (sheet.getName() == "Admin") || 
+        (sheet.getName() == "working sheet") ||
+        (sheet.getName() == "Holidays")
+        ) continue;
+      //SpreadsheetApp.getUi().alert('Sheet to be deleted ='+ sheet.getName());
+      var sheet_to_delete = ss.getSheetByName(sheet.getName());
+      ss.deleteSheet(sheet_to_delete); 
+    } // end of loop
+    
+  } else {
+    Logger.log('Purge cancelled.');
+  }
+
+
+    
+
+
+
+} // end of function 
+
+
+function onOpen() 
+{
+  var ui = SpreadsheetApp.getUi();
+    ui.createMenu('Admin Module')
+    .addItem('Send Report to YH and SLs', 'sendReport')
+    .addItem('Purge Old Data','purgeOldData')
+    .addToUi(); 
+}
