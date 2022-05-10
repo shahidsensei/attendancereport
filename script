@@ -225,6 +225,7 @@ function backupTodayData()
   if (today_sheet == null) 
   {
     var responses_sheet = sh.getSheetByName("Form Responses 1");
+    responses_sheet.sort(2).sort(1)
     responses_sheet.copyTo(sh).setName(today);
   }
   
