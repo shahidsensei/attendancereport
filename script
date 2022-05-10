@@ -114,7 +114,7 @@ function sendReport()
   
   var sh = SpreadsheetApp.getActiveSpreadsheet(); // gets the whole spreadsheet
   var working_sheet = sh.getSheetByName("working sheet"); //gets hold of the Responses sheet
-  working_sheet.sort(2).sort(1); // sort by Class which is 2nd col, then by timestamp
+  working_sheet.sort(1).sort(2); // sort by Class which is 2nd col, then by timestamp
   Logger.log('In sendReport: working_sheet = '+working_sheet)
   var working_sheet_data = working_sheet.getDataRange().getValues();
 
